@@ -1,50 +1,46 @@
 #!/usr/bin/env python3
 """
-vamp_icmp_shadow.py — VampSecure Labs · ICMP Shadow v1.2
-=========================================================
-Canal encubierto sobre protocolo ICMP para laboratorio de detección de
-exfiltración de datos (red team / blue team training).
+vamp_icmp_shadow.py — Canal Encubierto ICMP para Red/Blue Team
+==============================================================
+VampSecure Labs · VampSecure Studios
+Para Uso Exclusivo en Pruebas de Penetración Autorizadas — v1.2
 
-Propósito
----------
-Esta herramienta existe ÚNICAMENTE con finalidad educativa y de
-investigación defensiva:
-  · Demostrar que ICMP puede usarse como canal de exfiltración
-  · Entrenar a equipos Blue Team a detectar este tipo de tráfico
-  · Validar reglas de IDS/IPS (Snort, Suricata) y firewalls
+DESCRIPCIÓN GENERAL
+-------------------
+Implementación de canal encubierto sobre protocolo ICMP destinada a
+entornos de laboratorio Red/Blue Team. Permite demostrar que el campo
+payload de paquetes ICMP Echo Request puede usarse como vector de
+exfiltración de datos, eludiendo controles de red que solo filtran por
+protocolo o puerto pero no inspeccionan el contenido ICMP en profundidad.
 
-Técnica
--------
-  1. Emisor: cifra el mensaje con XOR(clave) → Base64 → lo inserta en
-     el campo payload de paquetes ICMP Echo Request (type=8)
-  2. Receptor: captura ICMP Echo Requests, extrae el payload, decodifica
-     Base64 → XOR(clave) → mensaje en texto claro
-  3. Soporte para mensajes largos (fragmentación automática en chunks)
+Su finalidad es exclusivamente educativa y defensiva: validar reglas IDS/IPS
+(Snort, Suricata), entrenar equipos Blue Team a detectar este patrón de
+tráfico y documentar el vector en informes de auditoría de red. No debe
+utilizarse fuera de entornos de laboratorio propios o con autorización escrita.
 
-Cambios v1.2
+ARQUITECTURA DE EJECUCIÓN (2 modos)
+------------------------------------
+  Modo send (emisor)
+    1. El mensaje se cifra mediante XOR(clave) y se codifica en Base64.
+    2. El resultado se fragmenta en chunks de CHUNK_SIZE bytes (default 200).
+    3. Cada chunk se prefija con MAGIC_PREFIX ("VSHDW:") para identificación.
+    4. Se envían paquetes ICMP Echo Request (type=8) con el chunk como payload.
+    Clave: parámetro --key o fichero --key-file (default: VAMP_KEY_2026).
+
+  Modo listen (receptor)
+    Captura ICMP Echo Requests mediante Scapy sniff() con filtro BPF "icmp".
+    Extrae el payload, verifica el prefijo VSHDW:, decodifica Base64 → XOR.
+    Reensambla chunks en orden de llegada. Verbose mode para depuración.
+
+DEPENDENCIAS
 ------------
-  · Rich output (emisor y receptor)
-  · Chunked send: mensajes largos divididos en paquetes de 200 bytes
-  · Key desde fichero (--key-file) o parámetro (--key)
-  · Modo verbose para depuración de payloads
-  · Corrección de decodificación robusta (fallback UTF-8 → latin-1)
+  scapy    >= 2.5.0    — Captura y forja de paquetes de red (requiere root)
+  rich     >= 13.7.0   — Salida de consola con formato enriquecido y tablas
 
-Uso
----
-  # Enviar mensaje
-  sudo python vamp_icmp_shadow.py send -t 192.168.1.50 -d "mensaje secreto"
-
-  # Escuchar en interfaz eth0
-  sudo python vamp_icmp_shadow.py listen -i eth0
-
-  # Con clave personalizada y fragmentación
-  sudo python vamp_icmp_shadow.py send -t 10.0.0.5 -d "texto largo..." -k "MI_CLAVE_2026"
-
-ADVERTENCIA: Solo para entornos de laboratorio autorizados.
-Requiere root o CAP_NET_RAW.
-
-Dependencias: scapy, rich
-© VampSecure Studios — VampSecure Labs Security Research Division
+AUTORÍA
+-------
+  © VampSecure Studios — VampSecure Labs Security Research Division
+  Todos los derechos reservados. Uso exclusivo en entornos autorizados.
 """
 
 from __future__ import annotations
@@ -79,13 +75,14 @@ CHUNK_SIZE = 200   # bytes por paquete ICMP (texto ofuscado en Base64)
 MAGIC_PREFIX = "VSHDW:"  # prefijo para identificar paquetes del canal
 
 BANNER = r"""
- ██╗   ██╗ █████╗ ███╗   ███╗██████╗ ███████╗███████╗ ██████╗
- ██║   ██║██╔══██╗████╗ ████║██╔══██╗██╔════╝██╔════╝██╔════╝
- ██║   ██║███████║██╔████╔██║██████╔╝███████╗█████╗  ██║
- ╚██╗ ██╔╝██╔══██║██║╚██╔╝██║██╔═══╝ ╚════██║██╔══╝  ██║
-  ╚████╔╝ ██║  ██║██║ ╚═╝ ██║██║     ███████║███████╗╚██████╗
-   ╚═══╝  ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝ ╚═════╝
-   [ICMP-SHADOW v{version}] by VampSecure Labs
+  ____   ____    _    __  __ ____  _____ ____ _   _ ____  _____   _        _    ____ ____
+ \ \ / / _  |  / \  |  \/  |  _ \/ ____/ ___| | | |  _ \| ____| | |      / \  | __ ) ___|
+  \ V / (_| | / _ \ | |\/| | |_) \___ \| |___| | | | |_) |  _|   | |     / _ \ |  _ \___ \
+   | |  \__, |/ ___ \| |  | |  __/ ___) |___  | |_| |  _ <| |___  | |___ / ___ \| |_) |__) |
+   |_|     /_/_/   \_|_|  |_|_|   |____/\____|\___/|_| \_|_____| |_____/_/   \_|____/____/
+      by VampSecure Studios · vamp-icmp-shadow v1.2 · Covert ICMP Channel for Red/Blue Team
+      ───────────────────────────────────────────────────────────────────────────────────────
+      USO EXCLUSIVO EN AUDITORÍAS AUTORIZADAS · El uso no autorizado es ilegal
 """
 
 console = Console()
