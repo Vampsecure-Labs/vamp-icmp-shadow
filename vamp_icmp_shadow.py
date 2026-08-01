@@ -80,9 +80,9 @@ BANNER = r"""
   \ V / (_| | / _ \ | |\/| | |_) \___ \| |___| | | | |_) |  _|   | |     / _ \ |  _ \___ \
    | |  \__, |/ ___ \| |  | |  __/ ___) |___  | |_| |  _ <| |___  | |___ / ___ \| |_) |__) |
    |_|     /_/_/   \_|_|  |_|_|   |____/\____|\___/|_| \_|_____| |_____/_/   \_|____/____/
-      by VampSecure Studios · vamp-icmp-shadow v1.2 · Covert ICMP Channel for Red/Blue Team
-      ───────────────────────────────────────────────────────────────────────────────────────
-      USO EXCLUSIVO EN AUDITORÍAS AUTORIZADAS · El uso no autorizado es ilegal
+     by VampSecure Studios · vamp-icmp-shadow v1.2 · Covert ICMP Channel for Red/Blue Team
+     ───────────────────────────────────────────────────────────────────────────────────────
+     USO EXCLUSIVO EN AUDITORÍAS AUTORIZADAS · El uso no autorizado es ilegal
 """
 
 console = Console()
