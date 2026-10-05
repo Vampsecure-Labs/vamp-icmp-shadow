@@ -7,16 +7,10 @@ fragmentación de mensajes y comportamiento del ShadowListener sin red.
 """
 
 import base64
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 # El conftest.py ya insertó los mocks de Scapy y el path correcto.
 # Re-importamos aquí para que el IDE / linters lo vean explícitamente.
 import vamp_icmp_shadow as icmp_shadow
-
 
 # ────────────────────────────────────────────────────────────────────────────
 # Tests de _xor

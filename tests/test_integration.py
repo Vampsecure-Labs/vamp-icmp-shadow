@@ -7,15 +7,10 @@ y el comportamiento del receptor ante paquetes ICMP simulados.
 No realiza ninguna llamada de red real ni requiere privilegios root.
 """
 
-import asyncio
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 import vamp_icmp_shadow as icmp_shadow
-
 
 # ────────────────────────────────────────────────────────────────────────────
 # Pipeline completo de roundtrip
@@ -203,7 +198,7 @@ class TestShadowListenerIntegracion:
     def test_process_paquete_sin_raw_ignorado(self, listener):
         """Paquetes sin capa Raw son ignorados silenciosamente."""
         ICMP_cls = sys.modules["scapy.all"].ICMP
-        Raw_cls = sys.modules["scapy.all"].Raw
+        sys.modules["scapy.all"].Raw
 
         pkt = MagicMock()
         pkt.haslayer.side_effect = lambda c: c is ICMP_cls  # solo tiene ICMP, no Raw
@@ -227,7 +222,7 @@ class TestShadowListenerIntegracion:
         """Paquetes con payload sin MAGIC_PREFIX son ignorados."""
         ICMP_cls = sys.modules["scapy.all"].ICMP
         Raw_cls = sys.modules["scapy.all"].Raw
-        IP_cls = sys.modules["scapy.all"].IP
+        sys.modules["scapy.all"].IP
 
         pkt = MagicMock()
         pkt.haslayer.side_effect = lambda c: c in (ICMP_cls, Raw_cls)

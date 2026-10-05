@@ -29,8 +29,7 @@ _TOOL_DIR = Path(__file__).resolve().parent.parent
 if str(_TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOL_DIR))
 
-import vamp_icmp_shadow as icmp_shadow  # noqa: E402
-
+import vamp_icmp_shadow as icmp_shadow
 
 # ── Fixtures de claves ───────────────────────────────────────────────────────
 

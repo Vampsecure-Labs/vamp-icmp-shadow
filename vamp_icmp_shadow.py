@@ -52,10 +52,9 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 try:
-    from scapy.all import IP, ICMP, Raw, send, sniff
+    from scapy.all import ICMP, IP, Raw, send, sniff
 except ImportError:
     print("[ERROR] Instala scapy: pip install scapy", file=sys.stderr)
     sys.exit(1)
@@ -112,7 +111,7 @@ def obfuscate(text: str, key: str) -> str:
     return MAGIC_PREFIX + b64
 
 
-def deobfuscate(payload: str, key: str) -> Optional[str]:
+def deobfuscate(payload: str, key: str) -> str | None:
     """
     Extrae y descifra un payload obfuscado.
     Devuelve el texto en claro o None si no es un paquete Shadow válido.
@@ -166,7 +165,7 @@ def send_data(target: str, message: str, key: str, verbose: bool) -> None:
             send(pkt, verbose=False)
             status = "[green]OK[/]"
         except Exception as e:
-            status = f"[red]ERROR[/]"
+            status = "[red]ERROR[/]"
             if verbose:
                 console.print(f"[red]Error en paquete {i}: {e}[/]")
 
@@ -223,7 +222,7 @@ class ShadowListener:
 
         if clear:
             # Intentar reconstruir si viene segmentado
-            chunks = sorted(self._buffer[src_ip], key=lambda x: x[0])
+            sorted(self._buffer[src_ip], key=lambda x: x[0])
             # El último chunk determina si el mensaje es completo o no
             # (simplificación: cada chunk puede ser mensaje independiente)
             console.print(Panel(
