@@ -138,6 +138,83 @@ alert icmp any any -> any any (msg:"VampSecure ICMP Shadow channel"; \
 
 Use this tool to verify that your IDS signature correctly triggers before writing it into the production ruleset.
 
+## Sample Output
+
+**Sender side** (sending a message to 10.0.0.20):
+
+```
+$ sudo python vamp_icmp_shadow.py send -t 10.0.0.20 -d "exfil test" -k "LAB_KEY_2026"
+╔══════════════════════════════════════════════════════════╗
+║           vamp-icmp-shadow — SEND MODE                   ║
+║  Target: 10.0.0.20   Key: LAB_KEY_2026                   ║
+╚══════════════════════════════════════════════════════════╝
+┌──────────────────────────────────────────────────────────────────────┐
+│  Seq   Payload preview                        Bytes    Status        │
+├──────────────────────────────────────────────────────────────────────┤
+│  001   VSHDW:ZXhmaWwgdGVzdA==                  24 B    ✓ sent        │
+└──────────────────────────────────────────────────────────────────────┘
+[✓] 1 packet(s) transmitted — message delivered
+```
+
+**Listener side** (capturing the channel on eth0):
+
+```
+$ sudo python vamp_icmp_shadow.py listen -i eth0 -k "LAB_KEY_2026"
+╔══════════════════════════════════════════════════════════╗
+║          vamp-icmp-shadow — LISTEN MODE                  ║
+║  Interface: eth0   Key: LAB_KEY_2026                     ║
+╚══════════════════════════════════════════════════════════╝
+[*] Sniffing ICMP traffic on eth0 ...
+
+╭─── Shadow message received ──────────────────────────────────────────╮
+│  Source:   10.0.0.5                                                  │
+│  Seq:      001                                                       │
+│  Message:  exfil test                                                │
+╰──────────────────────────────────────────────────────────────────────╯
+```
+
+> Suricata rule `sid:9000001` (see Blue Team Detection Notes) fires on the `VSHDW:` prefix visible in the packet capture.
+
+---
+
+## Why vamp-icmp-shadow vs. hping3 · Scapy manual · nping
+
+| Feature | vamp-icmp-shadow | hping3 | Scapy manual | nping |
+|---------|:---:|:---:|:---:|:---:|
+| XOR+Base64 obfuscation layer | ✅ | ❌ | ❌ | ❌ |
+| Built-in `listen` / decode mode | ✅ | ❌ | ❌ | ❌ |
+| Magic-prefix filtering (ignores unrelated ICMP) | ✅ | ❌ | ❌ | ❌ |
+| Chunk reassembly across multiple packets | ✅ | ❌ | ❌ | ❌ |
+| Rich colored output for lab sessions | ✅ | ❌ | ❌ | ❌ |
+| Key file support (`--key-file`) | ✅ | ❌ | ❌ | ❌ |
+| Built-in Suricata detection example | ✅ | ❌ | ❌ | ❌ |
+| Designed for IDS rule validation workflows | ✅ | ⚠️ indirect | ❌ | ⚠️ indirect |
+
+- **hping3** can craft raw ICMP packets and set payloads manually, but provides no receive/decode side and no obfuscation; it tests connectivity and timing, not covert channel detection.
+- **Scapy** is a powerful library that can replicate this tool's behavior, but requires writing multi-page scripts per test scenario; vamp-icmp-shadow is purpose-built, reproducible, and ready to run.
+- **nping** (Nmap project) supports ICMP echo modes for performance testing but has no payload obfuscation or listener, making it unsuitable for IDS validation scenarios.
+- vamp-icmp-shadow ships with a **matching Suricata signature** and is designed so Blue Team analysts can run sender and listener side-by-side in a lab, verify detection, and document the result in a single session.
+
+---
+
+## Research Context & Defensive Use
+
+This tool exists for **IDS/IPS rule validation** and Red/Blue Team lab exercises. The table below maps each capability to its defensive research application.
+
+| Capability | Defensive research application | Reference |
+|------------|-------------------------------|-----------|
+| ICMP payload channel (`send`) | Prove that ICMP data exfiltration is possible in permissive network environments | MITRE ATT&CK T1048 — Exfiltration Over Alternative Protocol |
+| XOR obfuscation layer | Test whether IDS rules detect obfuscated payloads, not just plaintext strings | Snort/Suricata `content` + `pcre` operator coverage |
+| Magic-prefix marker (`VSHDW:`) | Generate a known, deterministic IOC for rule creation and signature testing | Suricata `content` match (`itype:8`) |
+| Chunk fragmentation across seq numbers | Validate that IDS reassembles ICMP streams before applying content rules | Suricata stream reassembly configuration |
+| Custom key (`--key`, `--key-file`) | Simulate per-engagement key rotation; verify key changes do not break IDS coverage | Operational security simulation |
+| Verbose mode on listener (`-v`) | Analyze all ICMP traffic in the capture window to locate false negatives | Blue Team traffic analysis workflow |
+| `listen` decode mode | Confirm that the Blue Team can recover plaintext from captured ICMP traffic | IR evidence collection simulation |
+| Root / `CAP_NET_RAW` enforcement | Ensures the tool only runs with appropriate privileges — avoids silent failures | Lab access control verification |
+| Inter-packet 50 ms delay | Prevents overwhelming the network stack; provides reproducible timing for PCAP replay | IDS replay and regression testing |
+
+---
+
 ## Part of VampSecure Labs Toolkit
 
 This tool is part of the **VampSecure Labs Security Toolkit** — a collection of research-grade security tools for authorized penetration testing and red/blue team exercises.
